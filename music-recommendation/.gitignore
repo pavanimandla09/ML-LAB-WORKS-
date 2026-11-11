@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.env
+data/music.db
+data/audio/*
+!data/audio/.gitkeep
+models/
+*.joblib
+*.pkl
+*.model
+.DS_Store
+data/lastfm_import/

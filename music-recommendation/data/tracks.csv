@@ -1,0 +1,25 @@
+track_id,title,artist,album,genre,mood,tags,energy,danceability,valence,tempo,acousticness,instrumentalness,audio_file
+track-01,Neon Sunrise,Aster Vale,Afterglow,Pop,uplifting,bright synth pop summer upbeat,0.82,0.78,0.86,118,0.12,0,track-01.wav
+track-02,Paper Planes,Aster Vale,Afterglow,Pop,hopeful,bright synth pop melodic upbeat,0.74,0.72,0.81,112,0.18,0,track-02.wav
+track-03,City Lights,Mira Sol,Midnight Stories,Pop,dreamy,pop electronic soft dreamy vocal,0.61,0.68,0.65,104,0.22,0,track-03.wav
+track-04,Golden Hour,Mira Sol,Midnight Stories,Pop,romantic,pop warm acoustic romantic,0.48,0.62,0.73,96,0.55,0,track-04.wav
+track-05,Quiet Corners,The North Lines,Small Rooms,Indie,reflective,indie guitar mellow introspective,0.38,0.55,0.42,92,0.72,0,track-05.wav
+track-06,Wildflower Radio,The North Lines,Small Rooms,Indie,hopeful,indie folk guitar organic uplifting,0.58,0.63,0.76,108,0.63,0,track-06.wav
+track-07,Coastline Letters,June Harbor,Tide Notes,Indie,calm,indie folk mellow acoustic coastal,0.31,0.49,0.51,84,0.83,0,track-07.wav
+track-08,Borrowed Time,June Harbor,Tide Notes,Indie,melancholic,indie alternative guitar reflective,0.52,0.57,0.34,101,0.48,0,track-08.wav
+track-09,Circuit Bloom,Static Garden,Soft Signals,Electronic,energetic,electronic house synth dance club,0.91,0.86,0.67,126,0.04,0.18,track-09.wav
+track-10,Pulse Theory,Static Garden,Soft Signals,Electronic,focused,electronic techno driving synth,0.88,0.72,0.55,132,0.02,0.34,track-10.wav
+track-11,Blue Frequency,Nova Arcade,Digital Skies,Electronic,dreamy,electronic ambient synth atmospheric,0.55,0.64,0.59,110,0.18,0.52,track-11.wav
+track-12,Afterimage,Nova Arcade,Digital Skies,Electronic,intense,electronic synth cinematic dark,0.79,0.6,0.38,120,0.06,0.25,track-12.wav
+track-13,Velvet Morning,Theo Blue,Room for Jazz,Jazz,relaxed,jazz piano saxophone warm lounge,0.29,0.43,0.57,86,0.68,0,track-13.wav
+track-14,Sunday Quartet,Theo Blue,Room for Jazz,Jazz,peaceful,jazz quartet piano upright bass,0.24,0.38,0.62,78,0.74,0,track-14.wav
+track-15,Corner Table,Ella Reed,Late Set,Jazz,romantic,jazz trumpet piano mellow evening,0.35,0.51,0.49,94,0.61,0,track-15.wav
+track-16,Blue Note Walk,Ella Reed,Late Set,Jazz,swinging,jazz swing saxophone upbeat,0.56,0.66,0.72,116,0.51,0,track-16.wav
+track-17,Weightless Room,Cloud Atlas,Slow Motion,Ambient,calm,ambient drone pads sleep meditation,0.12,0.2,0.38,68,0.92,0.84,track-17.wav
+track-18,Rain on Glass,Cloud Atlas,Slow Motion,Ambient,reflective,ambient piano rain cinematic,0.18,0.25,0.44,74,0.88,0.62,track-18.wav
+track-19,Soft Orbit,Lumen Field,Orbital,Ambient,dreamy,ambient electronic space atmospheric,0.26,0.33,0.53,82,0.79,0.72,track-19.wav
+track-20,Stillwater,Lumen Field,Orbital,Ambient,peaceful,ambient minimalist meditation calm,0.08,0.14,0.31,60,0.96,0.91,track-20.wav
+track-21,Side Street,Kilo North,First Drafts,Hip-Hop,confident,hip hop boom bap drums bass groove,0.72,0.82,0.69,94,0.18,0,track-21.wav
+track-22,Open Verse,Kilo North,First Drafts,Hip-Hop,focused,hip hop lyrical rap mellow beat,0.63,0.75,0.58,88,0.24,0,track-22.wav
+track-23,Night Shift,Rae West,Northbound,Hip-Hop,intense,hip hop trap bass electronic nocturnal,0.86,0.79,0.42,142,0.05,0.08,track-23.wav
+track-24,Easy Does It,Rae West,Northbound,Hip-Hop,relaxed,hip hop jazz groove laidback,0.44,0.71,0.66,82,0.43,0,track-24.wav
