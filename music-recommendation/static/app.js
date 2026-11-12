@@ -383,12 +383,6 @@ $("#loginForm").addEventListener("submit", async (event) => {
   catch (error) { showError(error); }
 });
 
-$("#demoLogin").addEventListener("click", async () => {
-  $("#loginUsername").value = "demo";
-  $("#loginPassword").value = "music12345";
-  try { await login("demo", "music12345"); } catch (error) { showError(error); }
-});
-
 $("#registerForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
