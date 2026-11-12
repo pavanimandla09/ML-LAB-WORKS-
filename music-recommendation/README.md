@@ -14,7 +14,7 @@ The existing machine-learning lab notebooks in the parent repository are kept se
 - A popularity baseline for trending tracks and cold-start users.
 - Hybrid scoring that combines collaborative, content and popularity scores.
 - Similar-track discovery and a short explanation with each recommendation.
-- Deterministic synthetic catalogue and interaction fixtures, plus original generated audio previews.
+- Deterministic synthetic catalogue and interaction fixtures, plus original generated audio. The first six English demos and six Telugu-fusion originals are generated as full 90-second instrumental arrangements.
 - Unit tests and a chronological offline ranking evaluation script.
 
 ## Requirements
@@ -38,7 +38,7 @@ From a terminal:
 
 Open http://127.0.0.1:8000 in a browser.
 
-The application creates a local SQLite database at data/music.db and generates short, original synthesised WAV previews in data/audio the first time it starts. Both are ignored by Git.
+The application creates a local SQLite database at data/music.db and generates original synthesised WAV arrangements in data/audio the first time it starts. The six Telugu originals have individual SVG cover artwork in static/covers/. Both are ignored by Git.
 
 ### Demo account
 
@@ -177,6 +177,7 @@ The bundled fixture is synthetic. Any metrics obtained from it demonstrate that 
     ├── scripts/
     │   └── evaluate.py
     ├── static/
+    │   ├── covers/                 original Telugu demo cover artwork
     │   ├── app.js
     │   ├── index.html
     │   └── styles.css
