@@ -112,8 +112,11 @@ function cardMarkup(track) {
   const liked = state.liked.has(track.track_id);
   const symbol = String(track.title || "S").trim().slice(0, 1).toUpperCase();
   const reason = track.reason ? '<p class="track-reason">' + escapeHtml(track.reason) + "</p>" : "";
+  const artwork = track.artwork_url
+    ? '<img class="track-cover" src="' + escapeHtml(track.artwork_url) + '" alt="Cover art for ' + escapeHtml(track.title) + '">'
+    : '<span class="art-symbol">' + escapeHtml(symbol) + '</span>';
   return '<article class="track-card ' + genreClass(track.genre) + '">' +
-    '<div class="track-art"><span class="art-symbol">' + escapeHtml(symbol) + '</span>' +
+    '<div class="track-art">' + artwork +
     '<button class="quick-play" data-play-track="' + escapeHtml(track.track_id) + '" aria-label="Play ' + escapeHtml(track.title) + '">▶</button></div>' +
     '<div class="track-info"><div class="track-copy"><strong>' + escapeHtml(track.title) + '</strong><span>' +
     escapeHtml(track.artist) + " · " + escapeHtml(track.genre) + "</span></div></div>" + reason +
@@ -142,9 +145,11 @@ async function loadHome() {
     api("/api/recommendations/" + strategy + "?limit=8"),
     api("/api/recommendations/popularity?limit=8"),
     api("/api/genres"),
+    api("/api/tracks?genre=Telugu%20Fusion&limit=12"),
   ]);
   renderTracks("#recommendationsGrid", results[0], "Play a few tracks to personalise your recommendations.");
   renderTracks("#trendingGrid", results[1], "The collection is waiting for its first listens.");
+  renderTracks("#teluguGrid", results[3], "New Telugu-inspired originals are coming soon.");
   $("#genreChips").innerHTML = results[2].map((genre) =>
     '<button class="genre-chip" data-genre="' + escapeHtml(genre) + '">' + escapeHtml(genre) + "</button>"
   ).join("");
@@ -258,7 +263,8 @@ async function playTrack(track, queue = null) {
   state.currentTrack = track;
   $("#playerTitle").textContent = track.title;
   $("#playerArtist").textContent = track.artist;
-  $("#playerArtwork").textContent = String(track.title || "S").slice(0, 1).toUpperCase();
+  $("#playerArtwork").textContent = track.artwork_url ? "" : String(track.title || "S").slice(0, 1).toUpperCase();
+  $("#playerArtwork").style.backgroundImage = track.artwork_url ? "url(\'" + track.artwork_url + "\')" : "";
   $("#playerLike").disabled = false;
   updatePlayerLike();
   audio.src = track.audio_url;

@@ -1,8 +1,8 @@
-"""Create distinct, original instrumental demo tracks for SoundScout.
+"""Create original instrumental demo tracks for SoundScout.
 
-The first six catalogue tracks are full-length 90-second arrangements. The
-remaining tracks receive distinct 18-second previews. All audio is generated
-locally from deterministic synthesis; no commercial recordings are bundled.
+The first six English tracks and six Telugu-fusion originals are full-length
+90-second arrangements. Other catalogue tracks receive 18-second previews.
+All audio is generated locally; no commercial recordings are bundled.
 """
 from __future__ import annotations
 
@@ -29,6 +29,16 @@ SCALES = (
     (0, 2, 5, 7, 9),       # open / ambient
     (0, 2, 4, 7, 11),      # uplifting
     (0, 3, 5, 8, 10),      # cinematic minor
+)
+
+# Original Indian-fusion melodic palettes inspired by familiar raga intervals.
+TELUGU_SCALES = (
+    (0, 2, 4, 7, 9),       # Mohanam-inspired
+    (0, 2, 4, 7, 11),      # Hamsadhwani-inspired
+    (0, 2, 4, 6, 7, 9, 11),# Kalyani-inspired
+    (0, 2, 3, 5, 7, 9, 10),# Kafi-inspired
+    (0, 2, 5, 7, 9),       # folk pentatonic
+    (0, 1, 5, 7, 8, 10),   # expressive minor palette
 )
 
 
@@ -63,6 +73,11 @@ def _render_track(track: dict[str, str], index: int, duration: float) -> np.ndar
     is_jazz = genre == "jazz"
     is_electronic = genre == "electronic"
     is_hiphop = genre in {"hip-hop", "hip hop"}
+    is_telugu = str(track.get("track_id", "")).startswith("telugu-")
+    if is_telugu:
+        scale = TELUGU_SCALES[index % len(TELUGU_SCALES)]
+        motif = rng.choice(scale, size=16, replace=True)
+        motif[::4] = np.array([scale[(index + n) % len(scale)] for n in range(4)])
 
     for beat_no in range(beat_count):
         start = int(beat_no * beat * rate)
@@ -94,6 +109,11 @@ def _render_track(track: dict[str, str], index: int, duration: float) -> np.ndar
         elif is_jazz:
             melody = 0.42 * _tone(melody_hz, length, rate)
             melody += 0.16 * _tone(melody_hz * 2.0, length, rate, 0.2)
+        elif is_telugu:
+            # A soft, flute-like lead with a plucked-string overtone.
+            melody = 0.38 * _tone(melody_hz * 2.0, length, rate, 0.08)
+            melody += 0.17 * _tone(melody_hz, length, rate, 0.35)
+            melody += 0.07 * _tone(melody_hz * 3.0, length, rate, 0.18)
         else:
             melody = 0.34 * _tone(melody_hz, length, rate)
             melody += 0.12 * _tone(melody_hz * 2.0, length, rate, 0.15)
@@ -116,6 +136,9 @@ def _render_track(track: dict[str, str], index: int, duration: float) -> np.ndar
         )
         if is_ambient:
             pad *= 1.8
+        if is_telugu:
+            # Warm tonic drone to give the original demo arrangements an Indian-fusion feel.
+            pad += 0.10 * _tone(root * 0.5, length, rate, 0.12)
 
         segment = (melody * env + bass + pad) * 0.58
 
@@ -174,7 +197,8 @@ def ensure_demo_audio(sample_rate: int = SAMPLE_RATE, duration: float = FULL_TRA
         filename = Path(str(track.get("audio_file", ""))).name
         if not filename or Path(filename).suffix.lower() != ".wav":
             continue
-        target_duration = min(float(duration), FULL_TRACK_SECONDS) if index < FULL_TRACK_COUNT else PREVIEW_SECONDS
+        is_full_arrangement = index < FULL_TRACK_COUNT or str(track.get("track_id", "")).startswith("telugu-")
+        target_duration = min(float(duration), FULL_TRACK_SECONDS) if is_full_arrangement else PREVIEW_SECONDS
         destination = AUDIO_DIR / filename
         if destination.exists() and _existing_duration(destination) >= target_duration - 0.5:
             continue

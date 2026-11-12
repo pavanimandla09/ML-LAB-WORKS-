@@ -155,6 +155,8 @@ def _track_payload(row: sqlite3.Row | dict) -> dict:
     result = dict(row)
     audio_file = Path(str(result.get("audio_file", ""))).name
     result["audio_url"] = f"/media/{quote(audio_file)}" if audio_file else ""
+    track_id = str(result.get("track_id", ""))
+    result["artwork_url"] = f"/static/covers/{quote(track_id)}.svg" if track_id.startswith("telugu-") else ""
     return result
 
 
