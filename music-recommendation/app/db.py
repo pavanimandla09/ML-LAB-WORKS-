@@ -113,7 +113,7 @@ def init_db() -> None:
         )
 
         track_count = conn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
-        if track_count == 0 and TRACKS_CSV.exists():
+        if TRACKS_CSV.exists():
             with TRACKS_CSV.open("r", encoding="utf-8", newline="") as handle:
                 reader = csv.DictReader(handle)
                 rows = []
