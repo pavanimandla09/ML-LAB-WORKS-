@@ -76,6 +76,8 @@ def _render_track(track: dict[str, str], index: int, duration: float) -> np.ndar
     is_telugu = str(track.get("track_id", "")).startswith("telugu-")
     if is_telugu:
         scale = TELUGU_SCALES[index % len(TELUGU_SCALES)]
+        motif = rng.choice(scale, size=16, replace=True)
+        motif[::4] = np.array([scale[(index + n) % len(scale)] for n in range(4)])
 
     for beat_no in range(beat_count):
         start = int(beat_no * beat * rate)
