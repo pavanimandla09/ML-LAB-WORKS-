@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_DIR / ".env")
 DATA_DIR = PROJECT_DIR / "data"
-AUDIO_DIR = DATA_DIR / "audio"
+_raw_audio_dir = Path(os.getenv("AUDIO_DIR", str(DATA_DIR / "audio"))).expanduser()
+AUDIO_DIR = _raw_audio_dir if _raw_audio_dir.is_absolute() else PROJECT_DIR / _raw_audio_dir
 TRACKS_CSV = DATA_DIR / "tracks.csv"
 INTERACTIONS_CSV = DATA_DIR / "interactions.csv"
 
@@ -169,17 +170,21 @@ def init_db() -> None:
                 seed_events,
             )
 
-        demo_user = conn.execute(
-            "SELECT user_id FROM users WHERE username = ?", ("demo",)
-        ).fetchone()
-        if demo_user is None:
-            password_hash = bcrypt.hashpw(
-                b"music12345", bcrypt.gensalt(rounds=12)
-            )
-            conn.execute(
-                """
-                INSERT INTO users (user_id, username, email, password_hash)
-                VALUES (?, ?, ?, ?)
-                """,
-                ("demo", "demo", "demo@example.local", password_hash),
-            )
+        if os.getenv("APP_ENV", "development").lower() == "production":
+            # Never expose the documented classroom demo credentials on a public deployment.
+            conn.execute("DELETE FROM users WHERE username = ?", ("demo",))
+        else:
+            demo_user = conn.execute(
+                "SELECT user_id FROM users WHERE username = ?", ("demo",)
+            ).fetchone()
+            if demo_user is None:
+                password_hash = bcrypt.hashpw(
+                    b"music12345", bcrypt.gensalt(rounds=12)
+                )
+                conn.execute(
+                    """
+                    INSERT INTO users (user_id, username, email, password_hash)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    ("demo", "demo", "demo@example.local", password_hash),
+                )

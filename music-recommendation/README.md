@@ -229,3 +229,18 @@ Replace the example ID with a source user ID actually present in the selected da
 Last.fm 1K provides listening events and basic artist/track metadata; it does not provide the audio recordings or the numeric audio descriptors used by this application's richer content model. Imported rows therefore use Unknown genre, blank mood/tags, zero numeric descriptors and no audio file. The content model can still use track and artist text; the audio player cannot play an imported recording until you add an audio file that you have the rights to use. Do not download commercial recordings from unofficial sources.
 
 Do not commit the extracted dataset or imported CSVs. The default import output directory is Git-ignored.
+
+
+## Deploy the complete application on Render
+
+SoundScout is designed as a same-origin FastAPI application: the Python service serves both the frontend and the API. Deploying the whole application as one Render web service avoids cross-origin API configuration and keeps playback, authentication and recommendations on the same origin.
+
+1. Open the Render Blueprint flow at https://render.com/deploy and connect this GitHub repository.
+2. Select the `render.yaml` Blueprint in the repository. The service uses `music-recommendation/` as its root directory.
+3. Review the service plan and persistent-disk cost shown by Render before confirming creation. The Blueprint uses a paid Starter web service with a 1 GB persistent disk so accounts, playlists, listening history and uploaded audio are not erased when the service restarts or is redeployed.
+4. Render generates `JWT_SECRET` automatically. Do not replace it with a value committed to the repository.
+5. After deployment, open the Render service URL and check `/api/health`. The root URL serves the SoundScout website; `/docs` serves the API reference.
+
+The public deployment does not create or expose the classroom demo account. Register a new account through the website. Local development still seeds the documented demo account when `APP_ENV` is not `production`.
+
+The Render disk is mounted at `/var/data`; `DATABASE_PATH` and `AUDIO_DIR` are configured to store the SQLite database and uploaded/generated audio there. Keep the disk attached to the service when redeploying. Do not publish `ADMIN_API_KEY`; leave audio uploads disabled unless you intentionally configure it as a private Render environment variable.
