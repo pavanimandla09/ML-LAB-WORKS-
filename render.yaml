@@ -2,15 +2,11 @@ services:
   - type: web
     name: soundscout
     runtime: python
-    plan: starter
+    plan: free
     rootDir: music-recommendation
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
-    disk:
-      name: soundscout-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -18,7 +14,3 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      - key: DATABASE_PATH
-        value: /var/data/music.db
-      - key: AUDIO_DIR
-        value: /var/data/audio
