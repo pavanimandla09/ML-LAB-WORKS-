@@ -269,18 +269,35 @@ async function playTrack(track, queue = null) {
   updatePlayerLike();
   audio.src = track.audio_url;
   audio.load();
+
+  // Keep playback errors separate from recommendation/history requests.
+  // A secondary API failure must never be reported as a missing audio file.
   try {
     await audio.play();
     $("#playPauseButton").textContent = "Ⅱ";
-    await recordEvent(track.track_id, "play", 0);
+  } catch (error) {
+    $("#playPauseButton").textContent = "▶";
+    console.error("Audio playback failed:", error, audio.error);
+    if (error && error.name === "NotAllowedError") {
+      toast("Your browser blocked playback. Press Play again to allow audio.");
+    } else if (audio.error) {
+      toast("This audio file could not be loaded. Please try another track.");
+    } else {
+      toast("Unable to start this track. Please try again.");
+    }
+    return;
+  }
+
+  // These are follow-up actions; failures here should not interrupt the player.
+  recordEvent(track.track_id, "play", 0).catch(() => {});
+  try {
     const similar = await api("/api/recommendations/similar/" + encodeURIComponent(track.track_id) + "?limit=4");
     renderTracks("#similarGrid", similar, "No similar tracks found.");
     $("#similarSubtitle").textContent = "Musical neighbours of " + track.title;
-    loadStats().catch(() => {});
   } catch (error) {
-    toast("Playback was blocked or the audio file is missing.");
-    console.error(error);
+    console.warn("Could not load similar tracks:", error.message);
   }
+  loadStats().catch(() => {});
 }
 
 function updatePlayerLike() {
