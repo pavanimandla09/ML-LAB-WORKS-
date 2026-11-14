@@ -6,7 +6,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ml.recommender import EVENT_WEIGHTS, HybridMusicRecommender
+from ml.recommender import (
+    COLD_START_WEIGHTS,
+    EVENT_WEIGHTS,
+    HYBRID_WEIGHTS,
+    HybridMusicRecommender,
+)
 
 
 def chronological_split(
@@ -51,14 +56,9 @@ def _strategy_scores(recommender: HybridMusicRecommender, user_id: str, strategy
     vectors = recommender._all_score_vectors(str(user_id))
     if strategy == "hybrid":
         if str(user_id) not in recommender.user_index or recommender.svd_model is None:
-            weights = {"content": 0.55, "popularity": 0.45}
+            weights = COLD_START_WEIGHTS
         else:
-            weights = {
-                "knn": 0.40,
-                "content": 0.25,
-                "svd": 0.20,
-                "popularity": 0.15,
-            }
+            weights = HYBRID_WEIGHTS
         active_weights = {
             key: weight for key, weight in weights.items()
             if np.any(vectors[key])
