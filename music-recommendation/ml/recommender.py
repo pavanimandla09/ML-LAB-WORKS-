@@ -351,12 +351,33 @@ class HybridMusicRecommender:
         )
         fallback_to_popularity = False
         if strategy == "hybrid":
-            # SVD is unavailable for a cold-start user; the remaining weights
-            # are re-normalised rather than treating unavailable CF as zero.
-            weights = {"svd": 0.45, "content": 0.40, "popularity": 0.15}
+            # Keep cold-start recommendations content/popularity based. For
+            # listeners with history, include item-KNN as a collaborative signal.
             if str(user_id) not in self.user_index or self.svd_model is None:
                 weights = {"content": 0.55, "popularity": 0.45}
-            score = sum(vectors[key] * weight for key, weight in weights.items())
+            else:
+                weights = {
+                    "knn": 0.40,
+                    "content": 0.25,
+                    "svd": 0.20,
+                    "popularity": 0.15,
+                }
+
+            # Re-normalise over signals that actually contain score variation.
+            # This prevents an unavailable component from silently lowering
+            # every candidate's hybrid score.
+            active_weights = {
+                key: weight for key, weight in weights.items()
+                if np.any(vectors[key])
+            }
+            weight_total = sum(active_weights.values())
+            if weight_total:
+                score = sum(
+                    vectors[key] * (weight / weight_total)
+                    for key, weight in active_weights.items()
+                )
+            else:
+                score = vectors["popularity"]
         elif strategy == "svd" and (
             self.svd_model is None or str(user_id) not in self.user_index
         ):
