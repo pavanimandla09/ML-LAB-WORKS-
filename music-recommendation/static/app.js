@@ -407,6 +407,9 @@ async function searchTracks(query) {
   renderTracks("#searchGrid", tracks, "No matching tracks. Try an artist, album or genre.");
 }
 
+$("#tasteForm")?.addEventListener("submit", saveTastePreferences);
+$("#skipTaste")?.addEventListener("click", () => { state.preferences.completed = true; localStorage.setItem(tasteStorageKey(), JSON.stringify(state.preferences)); closeTasteModal(); });
+
 document.addEventListener("click", async (event) => {
   const playButton = event.target.closest("[data-play-track]");
   if (playButton) {
