@@ -35,6 +35,17 @@ NUMERIC_FEATURES = (
     "instrumentalness",
 )
 
+# Validation-informed starting weights: emphasize metadata similarity because
+# the imported Last.fm catalogue has sparse collaborative/audio features.
+# These are tunable model parameters, not a guarantee of a target metric.
+HYBRID_WEIGHTS = {
+    "content": 0.80,
+    "knn": 0.05,
+    "svd": 0.05,
+    "popularity": 0.10,
+}
+COLD_START_WEIGHTS = {"content": 0.85, "popularity": 0.15}
+
 
 def _minmax(values: np.ndarray) -> np.ndarray:
     """Return a finite [0, 1] scaled vector; constants map to zero."""
@@ -268,18 +279,28 @@ class HybridMusicRecommender:
             return scores
         positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
         grouped = positive.groupby("track_id")["weight"].sum()
-        for track_id, weight in grouped.items():
-            source_index = self.track_index.get(str(track_id))
-            if source_index is None:
-                continue
-            distances, neighbors = self.knn_model.kneighbors(
-                self.item_user[source_index], return_distance=True
-            )
-            for distance, neighbor_index in zip(distances[0], neighbors[0]):
-                if int(neighbor_index) == source_index:
+        seeds = [
+            (self.track_index[str(track_id)], float(weight))
+            for track_id, weight in grouped.items()
+            if str(track_id) in self.track_index
+        ]
+        if not seeds:
+            return scores
+
+        # Query all listened-to seed tracks in one batch instead of making one
+        # nearest-neighbor model call per seed track.
+        source_indices = np.asarray([index for index, _ in seeds], dtype=int)
+        seed_weights = np.asarray([weight for _, weight in seeds], dtype=float)
+        distances, neighbors = self.knn_model.kneighbors(
+            self.item_user[source_indices], return_distance=True
+        )
+        for row_index, (row_distances, row_neighbors) in enumerate(zip(distances, neighbors)):
+            source_index = source_indices[row_index]
+            for distance, neighbor_index in zip(row_distances, row_neighbors):
+                if int(neighbor_index) == int(source_index):
                     continue
                 similarity = max(0.0, 1.0 - float(distance))
-                scores[int(neighbor_index)] += similarity * float(weight)
+                scores[int(neighbor_index)] += similarity * seed_weights[row_index]
         return scores
 
     def _popularity_scores(self) -> np.ndarray:
@@ -354,14 +375,9 @@ class HybridMusicRecommender:
             # Keep cold-start recommendations content/popularity based. For
             # listeners with history, include item-KNN as a collaborative signal.
             if str(user_id) not in self.user_index or self.svd_model is None:
-                weights = {"content": 0.55, "popularity": 0.45}
+                weights = COLD_START_WEIGHTS
             else:
-                weights = {
-                    "knn": 0.40,
-                    "content": 0.25,
-                    "svd": 0.20,
-                    "popularity": 0.15,
-                }
+                weights = HYBRID_WEIGHTS
 
             # Re-normalise over signals that actually contain score variation.
             # This prevents an unavailable component from silently lowering
