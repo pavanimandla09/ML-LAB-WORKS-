@@ -58,7 +58,7 @@ def _strategy_scores(recommender: HybridMusicRecommender, user_id: str, strategy
         if str(user_id) not in recommender.user_index or recommender.svd_model is None:
             weights = COLD_START_WEIGHTS
         else:
-            weights = HYBRID_WEIGHTS
+            weights = recommender.hybrid_weights
         active_weights = {
             key: weight for key, weight in weights.items()
             if np.any(vectors[key])
@@ -168,9 +168,12 @@ def evaluate_ranker(
     *,
     strategy: str,
     k: int = 10,
+    hybrid_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Evaluate top-k ranking. Positive play/complete/like/repeat/save events count."""
-    recommender = HybridMusicRecommender(tracks, train_interactions)
+    recommender = HybridMusicRecommender(
+        tracks, train_interactions, hybrid_weights=hybrid_weights
+    )
     relevant_by_user: dict[str, set[str]] = {}
     train_seen_by_user: dict[str, set[str]] = {}
     if not train_interactions.empty:
