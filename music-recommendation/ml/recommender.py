@@ -54,6 +54,34 @@ HYBRID_WEIGHTS = {
 COLD_START_WEIGHTS = {"content": 0.85, "popularity": 0.15}
 
 
+def _event_strength(events: pd.DataFrame, *, half_life_days: float = 180.0) -> pd.Series:
+    """Weight positive events by type and recency using training data only.
+
+    If timestamps are absent or cannot be parsed, retain the original event
+    weights. The newest event receives full weight; older events decay smoothly.
+    """
+    base = events["event_type"].map(EVENT_WEIGHTS).astype(float)
+    if "timestamp" not in events.columns or events.empty:
+        return base
+    raw = events["timestamp"]
+    if pd.api.types.is_numeric_dtype(raw):
+        numeric = pd.to_numeric(raw, errors="coerce")
+        # Last.fm exports commonly use Unix seconds; millisecond values are
+        # detected by magnitude. Avoid interpreting arbitrary small IDs as time.
+        unit = "ms" if numeric.dropna().abs().median() > 1e11 else "s"
+        parsed = pd.to_datetime(numeric, unit=unit, errors="coerce", utc=True)
+    else:
+        parsed = pd.to_datetime(raw, errors="coerce", utc=True)
+    valid = parsed.notna()
+    if not valid.any():
+        return base
+    newest = parsed[valid].max()
+    age_days = (newest - parsed).dt.total_seconds().div(86400.0).clip(lower=0)
+    decay = pd.Series(1.0, index=events.index, dtype=float)
+    decay.loc[valid] = np.power(0.5, age_days.loc[valid] / half_life_days)
+    return base * decay
+
+
 def _minmax(values: np.ndarray) -> np.ndarray:
     """Return a finite [0, 1] scaled vector; constants map to zero."""
     arr = np.asarray(values, dtype=float)
@@ -189,7 +217,7 @@ class HybridMusicRecommender:
             self._fit_empty_interactions()
             return
 
-        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["weight"] = _event_strength(positive)
         grouped = positive.groupby(["user_id", "track_id"], as_index=False)["weight"].sum()
         self.user_ids = sorted(grouped["user_id"].unique().tolist())
         self.user_index = {user_id: i for i, user_id in enumerate(self.user_ids)}
@@ -422,10 +450,11 @@ class HybridMusicRecommender:
         ]
         if events.empty:
             return scores
+        events["weight"] = _event_strength(events)
         grouped = events.groupby("track_id").agg(
             total=("event_type", "size"),
             listeners=("user_id", "nunique") if "user_id" in events.columns else ("event_type", "size"),
-            weighted=("event_type", lambda values: sum(EVENT_WEIGHTS[x] for x in values)),
+            weighted=("weight", "sum"),
         )
         for track_id, row in grouped.iterrows():
             idx = self.track_index.get(str(track_id))
