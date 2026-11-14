@@ -75,6 +75,7 @@ class HybridMusicRecommender:
         random_state: int = 42,
         max_svd_components: int = 20,
         knn_neighbors: int = 20,
+        hybrid_weights: dict[str, float] | None = None,
     ) -> None:
         if tracks is None or tracks.empty:
             raise ValueError("The track catalogue must contain at least one track.")
@@ -92,6 +93,14 @@ class HybridMusicRecommender:
         self.random_state = random_state
         self.max_svd_components = max_svd_components
         self.knn_neighbors = knn_neighbors
+        self.hybrid_weights = dict(hybrid_weights or HYBRID_WEIGHTS)
+        expected_signals = set(HYBRID_WEIGHTS)
+        if set(self.hybrid_weights) != expected_signals:
+            raise ValueError(f"hybrid_weights must contain exactly: {sorted(expected_signals)}")
+        if any(not np.isfinite(value) or value < 0 for value in self.hybrid_weights.values()):
+            raise ValueError("hybrid_weights must be finite and non-negative")
+        if sum(self.hybrid_weights.values()) <= 0:
+            raise ValueError("hybrid_weights must have a positive total")
         self.svd_model: TruncatedSVD | None = None
         self.svd_user_factors: np.ndarray | None = None
         self.user_index: dict[str, int] = {}
@@ -401,7 +410,7 @@ class HybridMusicRecommender:
             if str(user_id) not in self.user_index or self.svd_model is None:
                 weights = COLD_START_WEIGHTS
             else:
-                weights = HYBRID_WEIGHTS
+                weights = self.hybrid_weights
 
             # Re-normalise over signals that actually contain score variation.
             # This prevents an unavailable component from silently lowering
