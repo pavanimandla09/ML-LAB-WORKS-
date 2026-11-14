@@ -93,6 +93,7 @@ def main() -> None:
             "The chronological holdout trains on earlier events and evaluates on later events per user.",
             "Last.fm listening events are positive implicit feedback; they do not contain explicit dislikes or verified negative labels.",
             "The reported balanced sampled-pair accuracy treats sampled unseen tracks as candidate negatives. It is a ranking proxy, not conventional classification accuracy.",
+            "Ranking metrics exclude held-out tracks already present in each user's positive training history, matching the recommender's exclude_seen behavior.",
             "Use Precision@K, Recall@K, MAP@K and NDCG@K as the primary recommendation-ranking metrics.",
             "Do not describe any score as guaranteed or as real-world user satisfaction.",
         ],
