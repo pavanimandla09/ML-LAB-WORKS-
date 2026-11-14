@@ -343,13 +343,19 @@ def tune_hybrid_weights(
     best_score = -1.0
     best_weights: dict[str, float] | None = None
     tested = 0
-    signal_names = ("content", "knn", "svd", "popularity")
-    # Exhaustive simplex grid at 0.1 increments: 286 candidates, all summing to 1.
+    signal_names = ("content", "artist", "knn", "svd", "popularity")
+    # Exhaustive five-signal simplex grid at 0.1 increments: 1,001 candidates.
     for content_units in range(11):
-        for knn_units in range(11 - content_units):
-            for svd_units in range(11 - content_units - knn_units):
-                popularity_units = 10 - content_units - knn_units - svd_units
-                units = (content_units, knn_units, svd_units, popularity_units)
+        for artist_units in range(11 - content_units):
+            for knn_units in range(11 - content_units - artist_units):
+                for svd_units in range(11 - content_units - artist_units - knn_units):
+                    popularity_units = (
+                        10 - content_units - artist_units - knn_units - svd_units
+                    )
+                    units = (
+                        content_units, artist_units, knn_units, svd_units,
+                        popularity_units,
+                    )
                 weights = {
                     name: units[index] / 10.0
                     for index, name in enumerate(signal_names)
