@@ -297,7 +297,7 @@ class HybridMusicRecommender:
             positive = events[events["event_type"].isin(EVENT_WEIGHTS)].copy()
             if positive.empty:
                 return np.zeros(len(self.track_ids), dtype=float)
-            positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+            positive["weight"] = _event_strength(positive)
             if "timestamp" in positive.columns:
                 positive = positive.sort_values("timestamp")
             positive = positive.tail(50)
@@ -347,7 +347,7 @@ class HybridMusicRecommender:
         ].copy()
         if positive.empty:
             return
-        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["weight"] = _event_strength(positive)
         positive["artist"] = positive["track_id"].map(self.track_artists)
         counts = positive.groupby("artist")["weight"].sum()
         self.global_artist_counts = {
@@ -371,7 +371,7 @@ class HybridMusicRecommender:
         positive = events[events["event_type"].isin(EVENT_WEIGHTS)].copy()
         if positive.empty:
             return scores
-        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["weight"] = _event_strength(positive)
         positive["artist"] = positive["track_id"].map(self.track_artists)
         positive = positive[positive["artist"].fillna("").astype(str).str.len() > 0]
         if positive.empty:
@@ -409,7 +409,7 @@ class HybridMusicRecommender:
         positive = events[events["event_type"].isin(EVENT_WEIGHTS)].copy()
         if positive.empty:
             return scores
-        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["weight"] = _event_strength(positive)
         grouped = positive.groupby("track_id")["weight"].sum()
         seeds = [
             (self.track_index[str(track_id)], float(weight))
