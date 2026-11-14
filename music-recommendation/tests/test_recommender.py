@@ -160,6 +160,21 @@ class RecommenderTests(unittest.TestCase):
         self.assertGreater(artist_scores[model.track_index["t7"]], 0.0)
         self.assertIn("artist", model._all_score_vectors("u1"))
 
+    def test_user_knn_uses_similar_listeners_without_using_target_row(self):
+        scores = self.model._user_knn_scores("u1")
+        # u2 shares u1's positive history and has also listened to t5.
+        self.assertGreater(scores[self.model.track_index["t5"]], 0.0)
+
+        single_user = HybridMusicRecommender(
+            self.tracks,
+            self.events[self.events["user_id"] == "u1"],
+        )
+        self.assertFalse(single_user._user_knn_scores("u1").any())
+
+    def test_knn_signal_includes_user_based_collaboration(self):
+        scores = self.model._knn_scores("u1")
+        self.assertGreater(scores[self.model.track_index["t5"]], 0.0)
+
     def test_recency_weights_are_used_across_personalized_signals(self):
         with patch("ml.recommender._event_strength", wraps=_event_strength) as weighted:
             model = HybridMusicRecommender(self.tracks, self.events)
