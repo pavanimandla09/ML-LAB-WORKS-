@@ -256,11 +256,16 @@ def compare_strategies(
     interactions: pd.DataFrame,
     *,
     k: int = 10,
+    include_minilm: bool = False,
 ) -> list[dict[str, Any]]:
+    """Compare built-in models; opt into the separately installed MiniLM model."""
     train, test = chronological_split(interactions)
+    strategies = ["popularity", "content", "svd", "knn", "hybrid"]
+    if include_minilm:
+        strategies.append("minilm")
     return [
         evaluate_ranker(tracks, train, test, strategy=strategy, k=k)
-        for strategy in ("popularity", "content", "svd", "knn", "hybrid", "minilm")
+        for strategy in strategies
     ]
 
 
