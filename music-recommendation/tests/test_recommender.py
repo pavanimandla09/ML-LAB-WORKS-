@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -158,6 +159,15 @@ class RecommenderTests(unittest.TestCase):
         artist_scores = model._artist_scores("u1")
         self.assertGreater(artist_scores[model.track_index["t7"]], 0.0)
         self.assertIn("artist", model._all_score_vectors("u1"))
+
+    def test_recency_weights_are_used_across_personalized_signals(self):
+        with patch("ml.recommender._event_strength", wraps=_event_strength) as weighted:
+            model = HybridMusicRecommender(self.tracks, self.events)
+            model._content_scores("u1")
+            model._artist_scores("u1")
+            model._knn_scores("u1")
+        # Fit, global artist counts, content, artist affinity and item-KNN.
+        self.assertGreaterEqual(weighted.call_count, 5)
 
     def test_unknown_strategy_is_rejected(self):
         with self.assertRaises(ValueError):
