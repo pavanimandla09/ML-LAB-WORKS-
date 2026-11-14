@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from ml.evaluation import chronological_split, evaluate_ranker
+from ml.evaluation import (chronological_split, chronological_train_validation_test_split, evaluate_ranker, tune_hybrid_weights)
 from ml.recommender import HybridMusicRecommender
 
 
@@ -86,6 +86,49 @@ class RecommenderTests(unittest.TestCase):
         model = HybridMusicRecommender(catalogue, pd.DataFrame())
         self.assertEqual(model.diagnostics()["tracks"], 2)
         self.assertEqual(len(model.similar_tracks("x")), 1)
+
+
+    def test_three_way_split_keeps_small_users_in_training(self):
+        train, validation, test = chronological_train_validation_test_split(self.events)
+        self.assertGreater(len(train), 0)
+        self.assertTrue(validation.empty)
+        self.assertTrue(test.empty)
+
+    def test_validation_tuner_returns_normalized_weights(self):
+        catalogue = self.tracks.copy()
+        for track_number in range(7, 11):
+            extra = catalogue.iloc[track_number - 7].copy()
+            extra["track_id"] = f"t{track_number}"
+            extra["title"] = f"Extra Track {track_number}"
+            extra["artist"] = f"Extra Artist {track_number}"
+            catalogue = pd.concat([catalogue, extra.to_frame().T], ignore_index=True)
+        rows = []
+        for user_index in range(4):
+            user = f"tune-user-{user_index}"
+            track_sequence = [f"t{number}" for number in range(1, 11)]
+            for event_index, track_id in enumerate(track_sequence):
+                rows.append({
+                    "user_id": user,
+                    "track_id": track_id,
+                    "event_type": "play",
+                    "timestamp": f"2026-02-{event_index + 1:02d}T10:00:00Z",
+                })
+        events = pd.DataFrame(rows)
+        train, validation, test = chronological_train_validation_test_split(events)
+        self.assertGreater(len(validation), 0)
+        self.assertGreater(len(test), 0)
+        selected = tune_hybrid_weights(catalogue, train, validation, k=3)
+        self.assertEqual(selected["candidates_tested"], 286)
+        self.assertAlmostEqual(sum(selected["weights"].values()), 1.0)
+        result = evaluate_ranker(
+            catalogue,
+            pd.concat([train, validation], ignore_index=True),
+            test,
+            strategy="hybrid",
+            k=3,
+            hybrid_weights=selected["weights"],
+        )
+        self.assertEqual(result["strategy"], "hybrid")
 
     def test_unknown_strategy_is_rejected(self):
         with self.assertRaises(ValueError):
