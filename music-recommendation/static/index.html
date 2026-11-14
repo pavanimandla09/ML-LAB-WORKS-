@@ -10,6 +10,20 @@
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <section id="tasteModal" class="taste-modal hidden" role="dialog" aria-modal="true" aria-labelledby="tasteTitle">
+    <form id="tasteForm" class="taste-card">
+      <p class="eyebrow">MAKE IT YOURS</p><h2 id="tasteTitle">What are you in the mood for?</h2>
+      <p class="muted">A few preferences help SoundScout shape your hybrid recommendations. You can change these anytime.</p>
+      <div class="taste-fields">
+        <label>Age group <select name="age_group"><option value="">Prefer not to say</option><option>Under 18</option><option>18–24</option><option>25–34</option><option>35–44</option><option>45+</option></select></label>
+        <label>Current mood <select name="mood"><option value="">Any mood</option><option>Happy</option><option>Sad</option><option>Relaxed</option><option>Romantic</option><option>Energetic</option><option>Focused</option></select></label>
+        <label>Preferred language <select name="language"><option value="">Any language</option><option>Telugu</option><option>English</option><option>Hindi</option><option>Instrumental</option></select></label>
+        <label>Listening purpose <select name="purpose"><option value="">Anything</option><option>Study</option><option>Workout</option><option>Travel</option><option>Relax</option><option>Sleep</option></select></label>
+      </div>
+      <fieldset><legend>Favourite genres</legend><div class="taste-genres"><label><input type="checkbox" name="genres" value="Telugu Fusion"><span>Telugu Fusion</span></label><label><input type="checkbox" name="genres" value="Pop"><span>Pop</span></label><label><input type="checkbox" name="genres" value="Indie"><span>Indie</span></label><label><input type="checkbox" name="genres" value="Electronic"><span>Electronic</span></label><label><input type="checkbox" name="genres" value="Jazz"><span>Jazz</span></label><label><input type="checkbox" name="genres" value="Ambient"><span>Ambient</span></label><label><input type="checkbox" name="genres" value="Hip-Hop"><span>Hip-Hop</span></label></div></fieldset>
+      <div class="taste-actions"><button type="button" id="skipTaste" class="button button-outline">Skip for now</button><button type="submit" class="button button-primary">Save my taste</button></div>
+    </form>
+  </section>
   <section id="authView" class="auth-screen">
     <div class="auth-art">
       <div class="brand brand-large"><span class="brand-mark">S</span><span>soundscout</span></div>

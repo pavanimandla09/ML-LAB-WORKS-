@@ -9,6 +9,7 @@ const state = {
   catalog: [],
   repeat: false,
   shuffle: false,
+  preferences: {},
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -101,7 +102,57 @@ async function enterApp() {
   $("#welcomeHeading").textContent = "Made for " + state.user.username;
   state.catalog = await api("/api/tracks?limit=250");
   await loadLiked();
+  loadTastePreferences();
   await Promise.all([loadHome(), loadPlaylists(), loadStats()]);
+  if (!state.preferences.completed) openTasteModal();
+}
+
+function tasteStorageKey() { return "soundscout_taste_" + (state.user?.user_id || state.user?.username || "listener"); }
+function loadTastePreferences() {
+  try { state.preferences = JSON.parse(localStorage.getItem(tasteStorageKey()) || "{}"); }
+  catch { state.preferences = {}; }
+}
+function openTasteModal() {
+  const form = $("#tasteForm");
+  if (!form) return;
+  const p = state.preferences || {};
+  ["age_group","mood","language","purpose"].forEach((key) => { if (p[key]) form.elements[key].value = p[key]; });
+  form.querySelectorAll('input[name="genres"]').forEach((input) => { input.checked = (p.genres || []).includes(input.value); });
+  $("#tasteModal").classList.remove("hidden");
+}
+function closeTasteModal() { $("#tasteModal")?.classList.add("hidden"); }
+function saveTastePreferences(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  state.preferences = {
+    completed: true,
+    age_group: form.elements.age_group.value,
+    mood: form.elements.mood.value,
+    language: form.elements.language.value,
+    purpose: form.elements.purpose.value,
+    genres: Array.from(form.querySelectorAll('input[name="genres"]:checked')).map((input) => input.value),
+  };
+  localStorage.setItem(tasteStorageKey(), JSON.stringify(state.preferences));
+  closeTasteModal();
+  loadHome().catch(showError);
+  toast("Your music taste has been saved.");
+}
+function preferenceRank(tracks) {
+  const p = state.preferences || {};
+  if (!tracks?.length) return tracks || [];
+  const moodMap = { Happy:["uplifting","joyful","hopeful","energetic"], Sad:["melancholic","reflective","sad"], Relaxed:["calm","peaceful","relaxed","dreamy"], Romantic:["romantic","warm"], Energetic:["energetic","intense","swinging"], Focused:["focused","ambient","instrumental"] };
+  const purposeMap = { Study:["focused","calm","ambient","instrumental"], Workout:["energetic","intense","dance"], Travel:["upbeat","joyful","groove"], Relax:["calm","peaceful","mellow","ambient"], Sleep:["ambient","peaceful","calm","soft"] };
+  const terms = (track) => [track.genre,track.mood,track.tags,track.title,track.artist].join(" ").toLowerCase();
+  return [...tracks].map((track,index) => {
+    const text = terms(track); let score = 0;
+    if (p.genres?.includes(track.genre)) score += 5;
+    if (p.mood && (moodMap[p.mood] || []).some(word => text.includes(word))) score += 3;
+    if (p.purpose && (purposeMap[p.purpose] || []).some(word => text.includes(word))) score += 2;
+    if (p.language === "Telugu" && /telugu/i.test(text)) score += 5;
+    if (p.language === "Instrumental" && /instrumental|ambient/i.test(text)) score += 3;
+    if (p.language === "English" && !/telugu/i.test(text)) score += 1;
+    return { track, score, index };
+  }).sort((a,b)=>b.score-a.score || a.index-b.index).map(x=>x.track);
 }
 
 function genreClass(genre) {
@@ -147,7 +198,7 @@ async function loadHome() {
     api("/api/genres"),
     api("/api/tracks?genre=Telugu%20Fusion&limit=12"),
   ]);
-  renderTracks("#recommendationsGrid", results[0], "Play a few tracks to personalise your recommendations.");
+  renderTracks("#recommendationsGrid", preferenceRank(results[0]), "Play a few tracks to personalise your recommendations.");
   renderTracks("#trendingGrid", results[1], "The collection is waiting for its first listens.");
   renderTracks("#teluguGrid", results[3], "New Telugu-inspired originals are coming soon.");
   $("#genreChips").innerHTML = results[2].map((genre) =>
@@ -245,7 +296,7 @@ async function recordEvent(trackId, eventType, duration = 0) {
 async function playTrack(track, queue = null) {
   if (!track) return;
   if (!track.audio_url) {
-    toast("No audio file is available for this track. Add an authorised recording to enable playback.");
+    toast("Audio is not available for this track. Last.fm provides listening history, not song recordings. Try a SoundScout original preview.");
     return;
   }
   if (state.currentTrack && state.currentTrack.track_id !== track.track_id && !audio.ended) {
@@ -355,6 +406,9 @@ async function searchTracks(query) {
   $("#searchCount").textContent = tracks.length + " result" + (tracks.length === 1 ? "" : "s");
   renderTracks("#searchGrid", tracks, "No matching tracks. Try an artist, album or genre.");
 }
+
+$("#tasteForm")?.addEventListener("submit", saveTastePreferences);
+$("#skipTaste")?.addEventListener("click", () => { state.preferences.completed = true; localStorage.setItem(tasteStorageKey(), JSON.stringify(state.preferences)); closeTasteModal(); });
 
 document.addEventListener("click", async (event) => {
   const playButton = event.target.closest("[data-play-track]");
