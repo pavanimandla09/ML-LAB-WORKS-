@@ -51,13 +51,26 @@ def _strategy_scores(recommender: HybridMusicRecommender, user_id: str, strategy
     vectors = recommender._all_score_vectors(str(user_id))
     if strategy == "hybrid":
         if str(user_id) not in recommender.user_index or recommender.svd_model is None:
-            scores = 0.55 * vectors["content"] + 0.45 * vectors["popularity"]
+            weights = {"content": 0.55, "popularity": 0.45}
         else:
-            scores = (
-                0.45 * vectors["svd"]
-                + 0.40 * vectors["content"]
-                + 0.15 * vectors["popularity"]
+            weights = {
+                "knn": 0.40,
+                "content": 0.25,
+                "svd": 0.20,
+                "popularity": 0.15,
+            }
+        active_weights = {
+            key: weight for key, weight in weights.items()
+            if np.any(vectors[key])
+        }
+        weight_total = sum(active_weights.values())
+        if weight_total:
+            scores = sum(
+                vectors[key] * (weight / weight_total)
+                for key, weight in active_weights.items()
             )
+        else:
+            scores = vectors["popularity"]
     elif strategy == "svd" and (
         recommender.svd_model is None or str(user_id) not in recommender.user_index
     ):
