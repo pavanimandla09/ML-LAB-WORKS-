@@ -241,7 +241,7 @@ def evaluate_ranker(
         "catalogue_coverage": (
             len(recommended_catalogue) / max(len(tracks), 1)
         ),
-        "note": "Metrics reflect only the supplied dataset and split; synthetic demo data is not real-world evidence.",
+        "note": "Metrics reflect only the supplied dataset and split; verify dataset provenance and licensing before making real-world claims.",
     }
 
 
