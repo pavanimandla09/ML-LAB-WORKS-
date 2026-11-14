@@ -93,7 +93,7 @@ Popularity combines the log of weighted positive interactions with the log of di
 
 For users with an available SVD model, the initial blend is:
 
-    hybrid = 0.80 * content + 0.05 * KNN + 0.05 * SVD + 0.10 * popularity
+    hybrid = 0.80 * content + 0.00 * artist + 0.05 * KNN + 0.05 * SVD + 0.10 * popularity
 
 Each component is min-max normalised before blending. When SVD is not available for a user, the current implementation renormalises the available weights:
 
