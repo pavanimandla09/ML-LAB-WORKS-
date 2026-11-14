@@ -73,17 +73,23 @@ This is an **implicit-feedback ranking experiment**, not a star-rating predictor
 
 SVD requires multiple users and sufficient interaction history. If it cannot be fitted or a user is new, the hybrid ranker falls back to content and popularity signals.
 
-### 3. Item-item KNN
+### 3. Artist-affinity ranking
+
+Last.fm provides artist and track names even when genre and audio descriptors are missing. SoundScout therefore has a separate artist-affinity signal: it aggregates a listener's positive training plays by artist and scores catalogue tracks by that listener's history with the artist. A square-root global-count adjustment reduces the advantage of artists that dominate the training catalogue. This signal can surface unheard tracks by artists a listener already enjoys; it does not require audio files or invented metadata.
+
+The artist signal is computed only from the training interactions supplied to the recommender. Its contribution is selected alongside content, SVD, item-KNN and popularity weights using the chronological validation partition.
+
+### 4. Item-item KNN
 
 For every track, the model builds a vector of listener interaction strengths. NearestNeighbors with cosine distance finds tracks with similar interaction profiles. The tracks adjacent to a user's positive listening history become KNN candidates.
 
 This is collaborative item similarity. It is distinct from content-based cosine similarity, which compares song metadata and audio descriptors.
 
-### 4. Popularity baseline
+### 5. Popularity baseline
 
 Popularity combines the log of weighted positive interactions with the log of distinct listeners. It gives new users something sensible to explore before the system has learned their taste. It is a baseline, not the primary personalisation method.
 
-### 5. Hybrid ranker
+### 6. Hybrid ranker
 
 For users with an available SVD model, the initial blend is:
 
@@ -93,7 +99,7 @@ Each component is min-max normalised before blending. When SVD is not available 
 
     cold_start = 0.85 * content + 0.15 * popularity
 
-These are starting weights, not claimed optimal weights. The `scripts/tune_hybrid.py` utility searches a 0.1-step weight grid using chronological validation NDCG@K, refits on train plus validation, and evaluates once on a later untouched test partition. It reports both baseline and tuned test metrics; it does not promise an accuracy target.
+These are starting weights, not claimed optimal weights. The `scripts/tune_hybrid.py` utility searches a 0.1-step five-signal weight grid (content, artist affinity, KNN, SVD and popularity) using chronological validation NDCG@K, refits on train plus validation, and evaluates once on a later untouched test partition. It reports both baseline and tuned test metrics; it does not promise an accuracy target.
 
 ## Data
 
