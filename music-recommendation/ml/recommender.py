@@ -43,7 +43,10 @@ NUMERIC_FEATURES = (
 # These weights have not yet been selected by a validation search and do not
 # guarantee a target metric.
 HYBRID_WEIGHTS = {
+    # Keep the previous blend as the baseline; validation tuning can allocate
+    # weight to the new artist-affinity signal when it helps held-out ranking.
     "content": 0.80,
+    "artist": 0.0,
     "knn": 0.05,
     "svd": 0.05,
     "popularity": 0.10,
@@ -87,6 +90,14 @@ class HybridMusicRecommender:
         self.tracks = self.tracks.drop_duplicates("track_id", keep="first").reset_index(drop=True)
         self.track_ids = self.tracks["track_id"].tolist()
         self.track_index = {track_id: i for i, track_id in enumerate(self.track_ids)}
+        self.track_artists: dict[str, str] = {}
+        self.artist_track_indices: dict[str, list[int]] = defaultdict(list)
+        if "artist" in self.tracks.columns:
+            for index, artist in enumerate(self.tracks["artist"].astype(str)):
+                normalized_artist = artist.strip().casefold()
+                self.track_artists[self.track_ids[index]] = normalized_artist
+                if normalized_artist:
+                    self.artist_track_indices[normalized_artist].append(index)
         self.interactions = (
             interactions.copy() if interactions is not None else pd.DataFrame()
         )
@@ -289,6 +300,53 @@ class HybridMusicRecommender:
             profile = normalize(profile, norm="l2", axis=1)
         return (profile @ self.content_matrix.T).toarray().ravel()
 
+    def _artist_scores(self, user_id: str) -> np.ndarray:
+        """Score tracks by the user's historical affinity for their artists.
+
+        Artist affinity is learned only from the recommender's training
+        interactions. Dividing by a square-root global artist count reduces
+        the advantage of artists that dominate the whole training catalogue.
+        """
+        scores = np.zeros(len(self.track_ids), dtype=float)
+        if not self.artist_track_indices:
+            return scores
+
+        events = self._events_for_user(user_id)
+        if events.empty:
+            return scores
+        positive = events[events["event_type"].isin(EVENT_WEIGHTS)].copy()
+        if positive.empty:
+            return scores
+        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["artist"] = positive["track_id"].map(self.track_artists)
+        positive = positive[positive["artist"].fillna("").astype(str).str.len() > 0]
+        if positive.empty:
+            return scores
+        user_artist_counts = positive.groupby("artist")["weight"].sum()
+
+        all_events = self.interactions.copy()
+        all_events["track_id"] = all_events["track_id"].astype(str)
+        all_events["event_type"] = all_events["event_type"].astype(str).str.lower()
+        all_positive = all_events[
+            all_events["event_type"].isin(EVENT_WEIGHTS)
+            & all_events["track_id"].isin(self.track_artists)
+        ].copy()
+        if all_positive.empty:
+            return scores
+        all_positive["weight"] = all_positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        all_positive["artist"] = all_positive["track_id"].map(self.track_artists)
+        global_artist_counts = all_positive.groupby("artist")["weight"].sum()
+
+        for artist, user_weight in user_artist_counts.items():
+            global_weight = max(
+                float(global_artist_counts.get(artist, user_weight)),
+                float(user_weight),
+            )
+            affinity = np.log1p(float(user_weight)) / np.sqrt(np.log1p(global_weight))
+            for track_index in self.artist_track_indices.get(str(artist), []):
+                scores[track_index] = float(affinity)
+        return scores
+
     def _svd_scores(self, user_id: str) -> np.ndarray | None:
         if (
             self.svd_model is None
@@ -369,6 +427,7 @@ class HybridMusicRecommender:
         self, user_id: str, seed_track_id: str | None = None
     ) -> dict[str, np.ndarray]:
         content = _minmax(self._content_scores(user_id, seed_track_id))
+        artist = _minmax(self._artist_scores(user_id))
         popularity = _minmax(self._popularity_scores())
         collaborative_raw = self._svd_scores(user_id)
         collaborative = (
@@ -379,6 +438,7 @@ class HybridMusicRecommender:
         knn = _minmax(self._knn_scores(user_id))
         return {
             "content": content,
+            "artist": artist,
             "svd": collaborative,
             "knn": knn,
             "popularity": popularity,
@@ -474,6 +534,7 @@ class HybridMusicRecommender:
                     "method": "popularity-fallback" if fallback_to_popularity else strategy,
                     "components": {
                         "content": content_score,
+                        "artist": float(vectors["artist"][idx]),
                         "svd": cf_score,
                         "knn": float(vectors["knn"][idx]),
                         "popularity": pop_score,
