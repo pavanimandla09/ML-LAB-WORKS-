@@ -256,3 +256,139 @@ def compare_strategies(
         evaluate_ranker(tracks, train, test, strategy=strategy, k=k)
         for strategy in ("popularity", "content", "svd", "knn", "hybrid")
     ]
+
+
+def chronological_train_validation_test_split(
+    interactions: pd.DataFrame,
+    *,
+    validation_fraction: float = 0.2,
+    test_fraction: float = 0.2,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Create chronological train/validation/test partitions independently per user."""
+    if not 0.05 <= validation_fraction <= 0.4:
+        raise ValueError("validation_fraction must be between 0.05 and 0.4.")
+    if not 0.05 <= test_fraction <= 0.4:
+        raise ValueError("test_fraction must be between 0.05 and 0.4.")
+    if validation_fraction + test_fraction >= 0.8:
+        raise ValueError("validation_fraction + test_fraction must be below 0.8.")
+    if interactions.empty:
+        empty = interactions.copy()
+        return empty, empty.copy(), empty.copy()
+
+    frame = interactions.copy()
+    if "timestamp" in frame.columns:
+        frame["_time"] = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
+        frame = frame.sort_values(["user_id", "_time"], kind="stable")
+    else:
+        frame = frame.sort_values(["user_id"], kind="stable")
+
+    train_parts, validation_parts, test_parts = [], [], []
+    for _, group in frame.groupby("user_id", sort=False):
+        group = group.reset_index(drop=True)
+        if len(group) < 5:
+            train_parts.append(group)
+            continue
+        test_count = max(1, int(round(len(group) * test_fraction)))
+        validation_count = max(1, int(round(len(group) * validation_fraction)))
+        while test_count + validation_count >= len(group) - 1:
+            if test_count >= validation_count and test_count > 1:
+                test_count -= 1
+            elif validation_count > 1:
+                validation_count -= 1
+            else:
+                break
+        train_end = len(group) - validation_count - test_count
+        validation_end = len(group) - test_count
+        train_parts.append(group.iloc[:train_end])
+        validation_parts.append(group.iloc[train_end:validation_end])
+        test_parts.append(group.iloc[validation_end:])
+
+    def combine(parts: list[pd.DataFrame]) -> pd.DataFrame:
+        if not parts:
+            return frame.iloc[0:0].drop(columns=["_time"], errors="ignore")
+        return pd.concat(parts, ignore_index=True).drop(columns=["_time"], errors="ignore")
+
+    return combine(train_parts), combine(validation_parts), combine(test_parts)
+
+
+def tune_hybrid_weights(
+    tracks: pd.DataFrame,
+    train_interactions: pd.DataFrame,
+    validation_interactions: pd.DataFrame,
+    *,
+    k: int = 10,
+) -> dict[str, Any]:
+    """Select hybrid weights on validation NDCG@K; never inspect the final test set."""
+    if k < 1:
+        raise ValueError("k must be at least 1.")
+    recommender = HybridMusicRecommender(tracks, train_interactions)
+    positive_validation = validation_interactions[
+        validation_interactions["event_type"].astype(str).str.lower().isin(EVENT_WEIGHTS)
+    ].copy()
+    if positive_validation.empty:
+        raise ValueError("Validation partition contains no positive listening events.")
+
+    user_cases = []
+    for user_id, group in positive_validation.groupby("user_id"):
+        user_id = str(user_id)
+        seen = recommender._seen_track_ids(user_id)
+        relevant = set(group["track_id"].astype(str)) - seen
+        if not relevant:
+            continue
+        vectors = recommender._all_score_vectors(user_id)
+        user_cases.append((user_id, relevant, seen, vectors))
+    if not user_cases:
+        raise ValueError("No novel positive validation tracks remain after excluding training history.")
+
+    best_score = -1.0
+    best_weights: dict[str, float] | None = None
+    tested = 0
+    signal_names = ("content", "knn", "svd", "popularity")
+    # Exhaustive simplex grid at 0.1 increments: 286 candidates, all summing to 1.
+    for content_units in range(11):
+        for knn_units in range(11 - content_units):
+            for svd_units in range(11 - content_units - knn_units):
+                popularity_units = 10 - content_units - knn_units - svd_units
+                units = (content_units, knn_units, svd_units, popularity_units)
+                weights = {
+                    name: units[index] / 10.0
+                    for index, name in enumerate(signal_names)
+                }
+                ndcgs = []
+                for _, relevant, seen, vectors in user_cases:
+                    active = {
+                        name: weight for name, weight in weights.items()
+                        if weight > 0 and np.any(vectors[name])
+                    }
+                    total = sum(active.values())
+                    if total:
+                        scores = sum(
+                            vectors[name] * (weight / total)
+                            for name, weight in active.items()
+                        )
+                    else:
+                        scores = vectors["popularity"]
+                    ranked_indices = np.argsort(-scores, kind="stable")
+                    recommended = [
+                        recommender.track_ids[int(index)]
+                        for index in ranked_indices
+                        if recommender.track_ids[int(index)] not in seen
+                    ][:k]
+                    hits = [1 if track_id in relevant else 0 for track_id in recommended]
+                    ideal = [1] * min(len(relevant), k)
+                    ndcgs.append(_dcg(hits) / _dcg(ideal) if ideal else 0.0)
+                score = float(np.mean(ndcgs)) if ndcgs else 0.0
+                tested += 1
+                if score > best_score:
+                    best_score = score
+                    best_weights = weights
+
+    if best_weights is None:
+        raise RuntimeError("Hybrid weight search did not produce a candidate.")
+    return {
+        "weights": best_weights,
+        "validation_ndcg_at_k": best_score,
+        "validation_users": len(user_cases),
+        "candidates_tested": tested,
+        "selection_metric": f"mean NDCG@{k} on chronological validation partition",
+    }
