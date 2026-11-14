@@ -344,42 +344,63 @@ def tune_hybrid_weights(
     best_weights: dict[str, float] | None = None
     tested = 0
     signal_names = ("content", "artist", "knn", "svd", "popularity")
-    # Exhaustive five-signal simplex grid at 0.1 increments: 1,001 candidates.
-    for content_units in range(11):
-        for artist_units in range(11 - content_units):
-            for knn_units in range(11 - content_units - artist_units):
-                for svd_units in range(11 - content_units - artist_units - knn_units):
+    # Coarse simplex grid (0.2 increments) cuts the search from 1,001 to 126
+    # candidates. Validation still selects weights; the test partition remains untouched.
+    grid_units = 5
+    for content_units in range(grid_units + 1):
+        for artist_units in range(grid_units - content_units + 1):
+            for knn_units in range(grid_units - content_units - artist_units + 1):
+                for svd_units in range(grid_units - content_units - artist_units - knn_units + 1):
                     popularity_units = (
-                        10 - content_units - artist_units - knn_units - svd_units
+                        grid_units - content_units - artist_units - knn_units - svd_units
                     )
                     units = (
                         content_units, artist_units, knn_units, svd_units,
                         popularity_units,
                     )
                     weights = {
-                        name: units[index] / 10.0
+                        name: units[index] / float(grid_units)
                         for index, name in enumerate(signal_names)
                     }
                     ndcgs = []
                     for _, relevant, seen, vectors in user_cases:
-                        active = {
-                            name: weight for name, weight in weights.items()
+                        active_names = [
+                            name for name, weight in weights.items()
                             if weight > 0 and np.any(vectors[name])
-                        }
-                        total = sum(active.values())
-                        if total:
+                        ]
+                        if active_names:
+                            total = sum(weights[name] for name in active_names)
                             scores = sum(
-                                vectors[name] * (weight / total)
-                                for name, weight in active.items()
+                                vectors[name] * (weights[name] / total)
+                                for name in active_names
                             )
                         else:
                             scores = vectors["popularity"]
-                        ranked_indices = np.argsort(-scores, kind="stable")
-                        recommended = [
-                            recommender.track_ids[int(index)]
-                            for index in ranked_indices
-                            if recommender.track_ids[int(index)] not in seen
-                        ][:k]
+                        # Avoid sorting the entire catalogue: mask seen tracks,
+                        # select only the best k candidates, then sort that small set.
+                        eligible_count = len(scores) - sum(
+                            1 for track_id in recommender.track_ids if track_id in seen
+                        )
+                        take = min(k, max(eligible_count, 0))
+                        if take:
+                            score_copy = scores.copy()
+                            if seen:
+                                seen_indices = [
+                                    index for index, track_id in enumerate(recommender.track_ids)
+                                    if track_id in seen
+                                ]
+                                score_copy[seen_indices] = -np.inf
+                            candidate_indices = np.argpartition(
+                                score_copy, -take
+                            )[-take:]
+                            ranked_indices = candidate_indices[
+                                np.argsort(-score_copy[candidate_indices], kind="stable")
+                            ]
+                            recommended = [
+                                recommender.track_ids[int(index)] for index in ranked_indices
+                            ]
+                        else:
+                            recommended = []
                         hits = [1 if track_id in relevant else 0 for track_id in recommended]
                         ideal = [1] * min(len(relevant), k)
                         ndcgs.append(_dcg(hits) / _dcg(ideal) if ideal else 0.0)
