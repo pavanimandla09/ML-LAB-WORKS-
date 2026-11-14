@@ -25,7 +25,10 @@ EVENT_WEIGHTS = {
     "like": 3.0,
     "playlist_add": 2.5,
 }
-NEGATIVE_EVENTS = {"skip", "unlike"}
+# Negative implicit feedback is used to steer content profiles away from
+# tracks (and similar metadata) that a listener explicitly skips or unlikes.
+NEGATIVE_EVENT_WEIGHTS = {"skip": 1.5, "unlike": 2.5}
+NEGATIVE_EVENTS = set(NEGATIVE_EVENT_WEIGHTS)
 NUMERIC_FEATURES = (
     "energy",
     "danceability",
@@ -254,6 +257,26 @@ class HybridMusicRecommender:
             profile = csr_matrix(
                 weights.reshape(1, -1)
             ) @ self.content_matrix[indices]
+
+            # Explicit negative feedback should reduce affinity for similar
+            # content instead of being ignored by the positive-only profile.
+            negative = events[events["event_type"].isin(NEGATIVE_EVENT_WEIGHTS)].copy()
+            if not negative.empty:
+                negative["weight"] = negative["event_type"].map(
+                    NEGATIVE_EVENT_WEIGHTS
+                ).astype(float)
+                if "timestamp" in negative.columns:
+                    negative = negative.sort_values("timestamp")
+                negative = negative.tail(50)
+                negative_indices = negative["track_id"].map(
+                    self.track_index
+                ).to_numpy(dtype=int)
+                negative_weights = negative["weight"].to_numpy(dtype=float)
+                negative_profile = csr_matrix(
+                    negative_weights.reshape(1, -1)
+                ) @ self.content_matrix[negative_indices]
+                profile = profile - negative_profile
+
             profile = normalize(profile, norm="l2", axis=1)
         return (profile @ self.content_matrix.T).toarray().ravel()
 
