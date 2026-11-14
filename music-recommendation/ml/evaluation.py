@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ml.semantic_recommender import MiniLMSemanticRecommender
 from ml.recommender import (
     COLD_START_WEIGHTS,
     EVENT_WEIGHTS,
@@ -51,8 +52,11 @@ def _dcg(relevance: list[int]) -> float:
     return sum(rel / __import__("math").log2(i + 2) for i, rel in enumerate(relevance))
 
 
-def _strategy_scores(recommender: HybridMusicRecommender, user_id: str, strategy: str) -> dict[str, float]:
+def _strategy_scores(recommender: Any, user_id: str, strategy: str) -> dict[str, float]:
     """Return candidate track scores using the same strategy definitions as recommend()."""
+    if strategy == "minilm":
+        values = recommender.score_vector(str(user_id))
+        return {track_id: float(values[index]) for index, track_id in enumerate(recommender.track_ids)}
     vectors = recommender._all_score_vectors(str(user_id))
     if strategy == "hybrid":
         if str(user_id) not in recommender.user_index or recommender.svd_model is None:
@@ -171,8 +175,10 @@ def evaluate_ranker(
     hybrid_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Evaluate top-k ranking. Positive play/complete/like/repeat/save events count."""
-    recommender = HybridMusicRecommender(
-        tracks, train_interactions, hybrid_weights=hybrid_weights
+    recommender = (
+        MiniLMSemanticRecommender(tracks, train_interactions)
+        if strategy == "minilm"
+        else HybridMusicRecommender(tracks, train_interactions, hybrid_weights=hybrid_weights)
     )
     relevant_by_user: dict[str, set[str]] = {}
     train_seen_by_user: dict[str, set[str]] = {}
@@ -250,11 +256,16 @@ def compare_strategies(
     interactions: pd.DataFrame,
     *,
     k: int = 10,
+    include_minilm: bool = False,
 ) -> list[dict[str, Any]]:
+    """Compare built-in models; opt into the separately installed MiniLM model."""
     train, test = chronological_split(interactions)
+    strategies = ["popularity", "content", "svd", "knn", "hybrid"]
+    if include_minilm:
+        strategies.append("minilm")
     return [
         evaluate_ranker(tracks, train, test, strategy=strategy, k=k)
-        for strategy in ("popularity", "content", "svd", "knn", "hybrid")
+        for strategy in strategies
     ]
 
 

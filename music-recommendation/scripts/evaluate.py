@@ -41,6 +41,10 @@ def main() -> None:
         help="Interaction events CSV (default: data/interactions.csv).",
     )
     parser.add_argument(
+        "--include-minilm", action="store_true",
+        help="Also evaluate the optional pretrained MiniLM semantic recommender.",
+    )
+    parser.add_argument(
         "--dataset-name", type=str, default=None,
         help="Optional label for the report, e.g. 'Last.fm 1K sampled'.",
     )
@@ -72,7 +76,7 @@ def main() -> None:
     if tracks.empty or interactions.empty:
         parser.error("Both CSV files must contain at least one data row.")
 
-    results = compare_strategies(tracks, interactions, k=args.k)
+    results = compare_strategies(tracks, interactions, k=args.k, include_minilm=args.include_minilm)
     is_default_demo = (
         tracks_path.resolve() == (PROJECT_DIR / "data" / "tracks.csv").resolve()
         and interactions_path.resolve() == (PROJECT_DIR / "data" / "interactions.csv").resolve()
