@@ -69,7 +69,7 @@ Interactions are aggregated into a sparse user-track matrix. Positive implicit e
 
 The aggregate is transformed with log(1 + strength), then factorised with scikit-learn TruncatedSVD. Predicted preference scores are obtained from the user's latent vector and the learned item components.
 
-This is an **implicit-feedback ranking experiment**, not a star-rating predictor. Skips are recorded and treated as consumed tracks so they are not immediately recommended again; they are not inserted as negative numbers into the non-negative interaction matrix. TruncatedSVD is used here as a course-friendly matrix factorisation method. It is not the same as an implicit-ALS objective.
+This is an **implicit-feedback ranking experiment**, not a star-rating predictor. Skips and unlikes are excluded from the non-negative collaborative matrix, but the content profile subtracts weighted metadata from the listener’s most recent negative events. They are also excluded from recommendations as already-consumed tracks. TruncatedSVD is used here as a course-friendly matrix factorisation method. It is not the same as an implicit-ALS objective.
 
 SVD requires multiple users and sufficient interaction history. If it cannot be fitted or a user is new, the hybrid ranker falls back to content and popularity signals.
 
@@ -87,13 +87,13 @@ Popularity combines the log of weighted positive interactions with the log of di
 
 For users with an available SVD model, the initial blend is:
 
-    hybrid = 0.45 * SVD + 0.40 * content + 0.15 * popularity
+    hybrid = 0.80 * content + 0.05 * KNN + 0.05 * SVD + 0.10 * popularity
 
 Each component is min-max normalised before blending. When SVD is not available for a user, the current implementation renormalises the available weights:
 
-    cold_start = 0.55 * content + 0.45 * popularity
+    cold_start = 0.85 * content + 0.15 * popularity
 
-These are starting weights, not claimed optimal weights. Tune them using a validation set before reporting them as final.
+These are starting weights, not claimed optimal weights. The `scripts/tune_hybrid.py` utility searches a 0.1-step weight grid using chronological validation NDCG@K, refits on train plus validation, and evaluates once on a later untouched test partition. It reports both baseline and tuned test metrics; it does not promise an accuracy target.
 
 ## Data
 
@@ -150,6 +150,10 @@ Run unit tests from this directory:
 Run the model comparison:
 
     python scripts/evaluate.py --k 10
+
+Tune hybrid weights on validation data and evaluate on an untouched later test partition:
+
+    python scripts/tune_hybrid.py --tracks reports/quick_tracks.csv --interactions reports/quick_interactions.csv --dataset-name "Last.fm quick sample" --k 10 --output reports/tuned-hybrid.json
 
 Optionally save the JSON report:
 
