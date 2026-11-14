@@ -35,9 +35,10 @@ NUMERIC_FEATURES = (
     "instrumentalness",
 )
 
-# Validation-informed starting weights: emphasize metadata similarity because
+# Initial hand-tuned weights: emphasize metadata similarity because
 # the imported Last.fm catalogue has sparse collaborative/audio features.
-# These are tunable model parameters, not a guarantee of a target metric.
+# These weights have not yet been selected by a validation search and do not
+# guarantee a target metric.
 HYBRID_WEIGHTS = {
     "content": 0.80,
     "knn": 0.05,
