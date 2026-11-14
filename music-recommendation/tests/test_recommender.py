@@ -3,7 +3,7 @@ import unittest
 import pandas as pd
 
 from ml.evaluation import (chronological_split, chronological_train_validation_test_split, evaluate_ranker, tune_hybrid_weights)
-from ml.recommender import HybridMusicRecommender
+from ml.recommender import HybridMusicRecommender, _event_strength
 
 
 def sample_catalogue():
@@ -42,6 +42,24 @@ class RecommenderTests(unittest.TestCase):
         self.tracks = sample_catalogue()
         self.events = sample_events()
         self.model = HybridMusicRecommender(self.tracks, self.events)
+
+    def test_recent_positive_events_receive_more_weight(self):
+        events = pd.DataFrame([
+            {"event_type": "play", "timestamp": "2025-01-01T00:00:00Z"},
+            {"event_type": "play", "timestamp": "2026-01-01T00:00:00Z"},
+        ])
+        weights = _event_strength(events)
+        self.assertGreater(weights.iloc[1], weights.iloc[0])
+        self.assertAlmostEqual(weights.iloc[1], 1.0)
+
+    def test_missing_timestamps_preserve_event_type_weights(self):
+        events = pd.DataFrame([
+            {"event_type": "play"},
+            {"event_type": "like"},
+        ])
+        weights = _event_strength(events)
+        self.assertAlmostEqual(weights.iloc[0], 1.0)
+        self.assertAlmostEqual(weights.iloc[1], 3.0)
 
     def test_svd_is_fitted_for_multi_user_history(self):
         self.assertTrue(self.model.diagnostics()["svd_available"])
