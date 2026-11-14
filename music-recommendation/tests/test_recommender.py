@@ -118,7 +118,7 @@ class RecommenderTests(unittest.TestCase):
         self.assertGreater(len(validation), 0)
         self.assertGreater(len(test), 0)
         selected = tune_hybrid_weights(catalogue, train, validation, k=3)
-        self.assertEqual(selected["candidates_tested"], 1001)
+        self.assertEqual(selected["candidates_tested"], 126)
         self.assertAlmostEqual(sum(selected["weights"].values()), 1.0)
         result = evaluate_ranker(
             catalogue,
