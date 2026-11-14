@@ -399,7 +399,8 @@ class HybridMusicRecommender:
         latent_user = self.svd_user_factors[user_row]
         return np.asarray(latent_user @ self.svd_model.components_, dtype=float)
 
-    def _knn_scores(self, user_id: str) -> np.ndarray:
+    def _item_knn_scores(self, user_id: str) -> np.ndarray:
+        """Score tracks from listened-to items using item-item cosine neighbors."""
         scores = np.zeros(len(self.track_ids), dtype=float)
         if self.knn_model is None:
             return scores
@@ -419,8 +420,6 @@ class HybridMusicRecommender:
         if not seeds:
             return scores
 
-        # Query all listened-to seed tracks in one batch instead of making one
-        # nearest-neighbor model call per seed track.
         source_indices = np.asarray([index for index, _ in seeds], dtype=int)
         seed_weights = np.asarray([weight for _, weight in seeds], dtype=float)
         distances, neighbors = self.knn_model.kneighbors(
@@ -434,6 +433,47 @@ class HybridMusicRecommender:
                 similarity = max(0.0, 1.0 - float(distance))
                 scores[int(neighbor_index)] += similarity * seed_weights[row_index]
         return scores
+
+    def _user_knn_scores(self, user_id: str) -> np.ndarray:
+        """Score tracks from the most similar listeners, excluding the target user."""
+        scores = np.zeros(len(self.track_ids), dtype=float)
+        user_row = self.user_index.get(str(user_id))
+        if user_row is None or self.user_item.shape[0] < 2:
+            return scores
+
+        normalized_users = normalize(self.user_item, norm="l2", axis=1)
+        similarities = (
+            normalized_users.getrow(user_row) @ normalized_users.T
+        ).toarray().ravel()
+        similarities[user_row] = 0.0
+        positive_neighbors = np.flatnonzero(similarities > 0.0)
+        if positive_neighbors.size == 0:
+            return scores
+
+        neighbor_count = min(self.knn_neighbors, positive_neighbors.size)
+        neighbor_indices = positive_neighbors[
+            np.argsort(similarities[positive_neighbors])[-neighbor_count:]
+        ]
+        neighbor_weights = similarities[neighbor_indices]
+        # Similar listeners contribute their implicit-positive profiles. The
+        # target user's own row is never included in this aggregation.
+        weighted_profiles = (
+            csr_matrix(neighbor_weights.reshape(1, -1))
+            @ self.user_item[neighbor_indices]
+        )
+        return weighted_profiles.toarray().ravel() / max(float(neighbor_weights.sum()), 1e-12)
+
+    def _knn_scores(self, user_id: str) -> np.ndarray:
+        """Combine item-neighbor and similar-listener collaborative signals."""
+        item_scores = self._item_knn_scores(user_id)
+        user_scores = self._user_knn_scores(user_id)
+        item_active = bool(np.any(item_scores))
+        user_active = bool(np.any(user_scores))
+        if item_active and user_active:
+            return 0.5 * _minmax(item_scores) + 0.5 * _minmax(user_scores)
+        if item_active:
+            return item_scores
+        return user_scores
 
     def _popularity_scores(self) -> np.ndarray:
         scores = np.zeros(len(self.track_ids), dtype=float)
