@@ -117,9 +117,6 @@ def _sampled_pair_accuracy(
     total_pairs = 0
 
     for user_id, group in positive_events.groupby("user_id"):
-        positives = set(group["track_id"].astype(str)) & set(recommender.track_ids)
-        if not positives:
-            continue
         seen_positive = set()
         if not train_positive.empty:
             seen_positive = set(
@@ -127,6 +124,13 @@ def _sampled_pair_accuracy(
                     train_positive["user_id"].astype(str) == str(user_id), "track_id"
                 ].astype(str)
             )
+        # The recommender excludes tracks already present in a user's training
+        # history, so repeated tracks cannot be valid ranking positives.
+        positives = (
+            set(group["track_id"].astype(str)) & set(recommender.track_ids)
+        ) - seen_positive
+        if not positives:
+            continue
         # Exclude all known positives for this user from the negative pool.
         all_user_positive = set(
             positive_events.loc[
@@ -153,7 +157,7 @@ def _sampled_pair_accuracy(
     return {
         "accuracy": total_correct / total_pairs if total_pairs else 0.0,
         "accuracy_pairs": total_pairs,
-        "accuracy_definition": "balanced held-out user-track pairs; top-N classification on equal positive/negative candidates",
+        "accuracy_definition": "balanced novel held-out user-track pairs; repeated training positives excluded; top-N classification on equal positive/negative candidates",
     }
 
 
@@ -168,10 +172,25 @@ def evaluate_ranker(
     """Evaluate top-k ranking. Positive play/complete/like/repeat/save events count."""
     recommender = HybridMusicRecommender(tracks, train_interactions)
     relevant_by_user: dict[str, set[str]] = {}
+    train_seen_by_user: dict[str, set[str]] = {}
+    if not train_interactions.empty:
+        train_positive = train_interactions[
+            train_interactions["event_type"].astype(str).str.lower().isin(EVENT_WEIGHTS)
+        ]
+        for user_id, group in train_positive.groupby("user_id"):
+            train_seen_by_user[str(user_id)] = set(group["track_id"].astype(str))
+
     for row in test_interactions.itertuples(index=False):
         event_type = str(getattr(row, "event_type", "")).lower()
-        if event_type in EVENT_WEIGHTS:
-            relevant_by_user.setdefault(str(row.user_id), set()).add(str(row.track_id))
+        user_id = str(row.user_id)
+        track_id = str(row.track_id)
+        # Evaluate only novel held-out tracks: recommend() intentionally
+        # excludes tracks already consumed in the training history.
+        if (
+            event_type in EVENT_WEIGHTS
+            and track_id not in train_seen_by_user.get(user_id, set())
+        ):
+            relevant_by_user.setdefault(user_id, set()).add(track_id)
 
     precisions = []
     recalls = []
