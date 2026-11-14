@@ -43,7 +43,10 @@ NUMERIC_FEATURES = (
 # These weights have not yet been selected by a validation search and do not
 # guarantee a target metric.
 HYBRID_WEIGHTS = {
+    # Keep the previous blend as the baseline; validation tuning can allocate
+    # weight to the new artist-affinity signal when it helps held-out ranking.
     "content": 0.80,
+    "artist": 0.0,
     "knn": 0.05,
     "svd": 0.05,
     "popularity": 0.10,
@@ -87,6 +90,14 @@ class HybridMusicRecommender:
         self.tracks = self.tracks.drop_duplicates("track_id", keep="first").reset_index(drop=True)
         self.track_ids = self.tracks["track_id"].tolist()
         self.track_index = {track_id: i for i, track_id in enumerate(self.track_ids)}
+        self.track_artists: dict[str, str] = {}
+        self.artist_track_indices: dict[str, list[int]] = defaultdict(list)
+        if "artist" in self.tracks.columns:
+            for index, artist in enumerate(self.tracks["artist"].astype(str)):
+                normalized_artist = artist.strip().casefold()
+                self.track_artists[self.track_ids[index]] = normalized_artist
+                if normalized_artist:
+                    self.artist_track_indices[normalized_artist].append(index)
         self.interactions = (
             interactions.copy() if interactions is not None else pd.DataFrame()
         )
@@ -111,6 +122,7 @@ class HybridMusicRecommender:
 
         self._fit_content()
         self._fit_interactions()
+        self._fit_artist_counts()
 
     def _fit_content(self) -> None:
         text_columns = [
@@ -289,6 +301,65 @@ class HybridMusicRecommender:
             profile = normalize(profile, norm="l2", axis=1)
         return (profile @ self.content_matrix.T).toarray().ravel()
 
+    def _fit_artist_counts(self) -> None:
+        """Precompute global artist interaction volume once from training data."""
+        self.global_artist_counts: dict[str, float] = {}
+        if (
+            not self.artist_track_indices
+            or self.interactions.empty
+            or not {"track_id", "event_type"}.issubset(self.interactions.columns)
+        ):
+            return
+        events = self.interactions.copy()
+        events["track_id"] = events["track_id"].astype(str)
+        events["event_type"] = events["event_type"].astype(str).str.lower()
+        positive = events[
+            events["event_type"].isin(EVENT_WEIGHTS)
+            & events["track_id"].isin(self.track_artists)
+        ].copy()
+        if positive.empty:
+            return
+        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["artist"] = positive["track_id"].map(self.track_artists)
+        counts = positive.groupby("artist")["weight"].sum()
+        self.global_artist_counts = {
+            str(artist): float(weight) for artist, weight in counts.items()
+        }
+
+    def _artist_scores(self, user_id: str) -> np.ndarray:
+        """Score tracks by the user's historical affinity for their artists.
+
+        Artist affinity is learned only from the recommender's training
+        interactions. Dividing by a square-root global artist count reduces
+        the advantage of artists that dominate the whole training catalogue.
+        """
+        scores = np.zeros(len(self.track_ids), dtype=float)
+        if not self.artist_track_indices:
+            return scores
+
+        events = self._events_for_user(user_id)
+        if events.empty:
+            return scores
+        positive = events[events["event_type"].isin(EVENT_WEIGHTS)].copy()
+        if positive.empty:
+            return scores
+        positive["weight"] = positive["event_type"].map(EVENT_WEIGHTS).astype(float)
+        positive["artist"] = positive["track_id"].map(self.track_artists)
+        positive = positive[positive["artist"].fillna("").astype(str).str.len() > 0]
+        if positive.empty:
+            return scores
+        user_artist_counts = positive.groupby("artist")["weight"].sum()
+
+        for artist, user_weight in user_artist_counts.items():
+            global_weight = max(
+                float(self.global_artist_counts.get(str(artist), user_weight)),
+                float(user_weight),
+            )
+            affinity = np.log1p(float(user_weight)) / np.sqrt(np.log1p(global_weight))
+            for track_index in self.artist_track_indices.get(str(artist), []):
+                scores[track_index] = float(affinity)
+        return scores
+
     def _svd_scores(self, user_id: str) -> np.ndarray | None:
         if (
             self.svd_model is None
@@ -369,6 +440,7 @@ class HybridMusicRecommender:
         self, user_id: str, seed_track_id: str | None = None
     ) -> dict[str, np.ndarray]:
         content = _minmax(self._content_scores(user_id, seed_track_id))
+        artist = _minmax(self._artist_scores(user_id))
         popularity = _minmax(self._popularity_scores())
         collaborative_raw = self._svd_scores(user_id)
         collaborative = (
@@ -379,6 +451,7 @@ class HybridMusicRecommender:
         knn = _minmax(self._knn_scores(user_id))
         return {
             "content": content,
+            "artist": artist,
             "svd": collaborative,
             "knn": knn,
             "popularity": popularity,
@@ -450,6 +523,7 @@ class HybridMusicRecommender:
             if track_id in seen:
                 continue
             content_score = float(vectors["content"][idx])
+            artist_score = float(vectors["artist"][idx])
             cf_score = float(vectors["svd"][idx])
             pop_score = float(vectors["popularity"][idx])
             if not has_history or fallback_to_popularity:
@@ -460,6 +534,8 @@ class HybridMusicRecommender:
                 reason = "Listeners with similar music taste also enjoyed this track"
             elif strategy == "popularity":
                 reason = "Popular with listeners in this music catalogue"
+            elif artist_score >= max(content_score, cf_score) and artist_score > 0.2:
+                reason = "By an artist in your listening history"
             elif content_score >= cf_score and content_score > 0.2:
                 reason = "Similar genre, mood or sound to tracks in your listening history"
             elif cf_score > 0.1:
@@ -474,6 +550,7 @@ class HybridMusicRecommender:
                     "method": "popularity-fallback" if fallback_to_popularity else strategy,
                     "components": {
                         "content": content_score,
+                        "artist": float(vectors["artist"][idx]),
                         "svd": cf_score,
                         "knn": float(vectors["knn"][idx]),
                         "popularity": pop_score,

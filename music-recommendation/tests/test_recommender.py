@@ -118,7 +118,7 @@ class RecommenderTests(unittest.TestCase):
         self.assertGreater(len(validation), 0)
         self.assertGreater(len(test), 0)
         selected = tune_hybrid_weights(catalogue, train, validation, k=3)
-        self.assertEqual(selected["candidates_tested"], 286)
+        self.assertEqual(selected["candidates_tested"], 1001)
         self.assertAlmostEqual(sum(selected["weights"].values()), 1.0)
         result = evaluate_ranker(
             catalogue,
@@ -129,6 +129,17 @@ class RecommenderTests(unittest.TestCase):
             hybrid_weights=selected["weights"],
         )
         self.assertEqual(result["strategy"], "hybrid")
+
+    def test_artist_affinity_scores_other_tracks_by_a_listened_artist(self):
+        catalogue = self.tracks.copy()
+        extra = catalogue.iloc[0].copy()
+        extra["track_id"] = "t7"
+        extra["title"] = "Another A Track"
+        catalogue = pd.concat([catalogue, extra.to_frame().T], ignore_index=True)
+        model = HybridMusicRecommender(catalogue, self.events)
+        artist_scores = model._artist_scores("u1")
+        self.assertGreater(artist_scores[model.track_index["t7"]], 0.0)
+        self.assertIn("artist", model._all_score_vectors("u1"))
 
     def test_unknown_strategy_is_rejected(self):
         with self.assertRaises(ValueError):
